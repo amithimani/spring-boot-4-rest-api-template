@@ -37,3 +37,8 @@ dependencies {
 tasks.named('test') {
   useJUnitPlatform()
 }
+
+// Only the executable Spring Boot jar is needed; skip the "-plain" library jar.
+tasks.named('jar') {
+  enabled = false
+}

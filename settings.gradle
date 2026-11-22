@@ -1,1 +1,6 @@
-rootProject.name = 'spring-boot-3-rest-api-template'
+plugins {
+  // Lets Gradle download the JDK 25 toolchain automatically when it is not installed locally.
+  id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'spring-boot-4-rest-api-template'
