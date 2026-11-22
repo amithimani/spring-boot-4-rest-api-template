@@ -32,11 +32,16 @@ This project is an upgraded fork of the [DIO Spring Boot 3 RESTful API Template]
 - **Spring Data JPA**: simple data access with optimistic locking (`@Version`).
 - **Bean Validation**: request payloads are validated before reaching the business layer.
 - **Problem Details (RFC 9457)**: every error is returned as `application/problem+json`.
+- **Resilient HTTP integration**: users fetched from [reqres.in](https://reqres.in) with `RestClient`, a Resilience4j circuit breaker, retries with backoff, timeouts, and structured logging.
 - **OpenAPI (Swagger)**: interactive API documentation via springdoc-openapi 3.
 
 ## Project Structure:
 
 The project is organized into several packages, each serving a specific purpose:
+
+- `client`: clients for external APIs (`client.reqres` wraps the reqres.in users API).
+
+- `config`: cross-cutting configuration, such as logging of Resilience4j events.
 
 - `controller`: REST controllers exposing the endpoints. The `controller.dto` package holds the request/response records, so the JPA entity is never exposed directly and clients cannot set server-managed fields (ID, XP, version).
 
@@ -75,6 +80,21 @@ The project focuses on a Heroes API as an example, which includes basic CRUD ope
 | PUT | `/heroes/{id}` | Rename a hero; send the last known `version` to get `409` on concurrent changes |
 | DELETE | `/heroes/{id}` | Delete a hero (`204`) |
 | PATCH | `/heroes/{id}/up` | Vote for a hero: +2 XP (Double XP Event \\o/) |
+| GET | `/users` | Users from the first 2 pages of reqres.in (see below) |
+
+### External users (reqres.in)
+
+`GET /users` returns the users from the **first 2 pages** of [`https://reqres.in/api/users`](https://reqres.in/api/users), merged in page order. If reqres.in reports fewer pages, it stops early.
+
+| Concern | Behaviour (configurable in `application.yml`) |
+| ------- | --------------------------------------------- |
+| Timeouts | connect `2s`, read `3s` (`reqres.connect-timeout`, `reqres.read-timeout`) |
+| Retry | up to 3 attempts with exponential backoff (500 ms, 1 s), **only** for I/O errors/timeouts, `5xx` and `429` |
+| Circuit breaker | opens when at least 50% of the last 10 calls fail (minimum 5 calls); stays open for 30 s, then lets 2 trial calls through |
+| Errors | `503` + Problem Details when reqres.in is down, timing out or rate limiting, or the circuit is open (open circuit / `429` include `Retry-After`); `502` when reqres.in rejects the request (other `4xx`) or returns an invalid body. A failure on any page fails the whole request (no partial results). |
+| Logging | every outbound call (method, URL, status, duration; never headers or bodies) at `DEBUG` on `me.dio.client`; retries, gave-up events and circuit state changes on `me.dio.resilience`; a summary per request on `me.dio.service` |
+
+reqres.in works without a key on a shared demo quota with a low daily limit. To use your own free key, set `REQRES_API_KEY`; it is sent as the `x-api-key` header.
 
 Exception handling is globally managed with a `@RestControllerAdvice` to ensure consistent Problem Details responses throughout the entire application.
 
@@ -101,6 +121,7 @@ The application can be hosted on [Railway.app](https://railway.app/) together wi
 
 - `SPRING_PROFILES_ACTIVE=prd`
 - `RAILWAY_DB_HOST`, `RAILWAY_DB_PORT`, `RAILWAY_DB_NAME`, `RAILWAY_DB_USERNAME`, `RAILWAY_DB_PASSWORD`
+- `REQRES_API_KEY` (optional, for `GET /users`)
 
 The `prd` profile does not create tables automatically; create the `heroes` table beforehand (or add a migration tool such as Flyway).
 
