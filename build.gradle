@@ -20,6 +20,7 @@ repositories {
 dependencies {
   implementation 'org.springframework.boot:spring-boot-starter-webmvc'
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+  implementation 'org.springframework.boot:spring-boot-starter-validation'
   implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.1'
 
   // H2 web console (used by the "dev" profile); a separate module since Spring Boot 4.

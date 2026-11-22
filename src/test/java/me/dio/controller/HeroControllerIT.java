@@ -1,11 +1,13 @@
 package me.dio.controller;
 
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -149,6 +151,67 @@ class HeroControllerIT {
     void upReturns404WhenMissing() throws Exception {
         mvc.perform(patch("/heroes/{id}/up", 12345))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createIgnoresClientIdAndNeverOverwritesExistingHero() throws Exception {
+        Hero existing = saveHero("Original", 50);
+
+        mvc.perform(post("/heroes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":" + existing.getId() + ",\"name\":\"Impostor\",\"version\":0}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Impostor"))
+            .andExpect(jsonPath("$.id").value(not(existing.getId().intValue())));
+
+        mvc.perform(get("/heroes/{id}", existing.getId()))
+            .andExpect(jsonPath("$.name").value("Original"))
+            .andExpect(jsonPath("$.xp").value(50));
+    }
+
+    @Test
+    void createWithBlankNameReturns400ProblemDetail() throws Exception {
+        mvc.perform(post("/heroes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"  \"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void notFoundIsReportedAsProblemDetail() throws Exception {
+        mvc.perform(get("/heroes/{id}", 12345))
+            .andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.status").value(404))
+            .andExpect(jsonPath("$.detail").value("Resource ID 12345 not found."));
+    }
+
+    @Test
+    void updateWithCurrentVersionSucceedsAndBumpsVersion() throws Exception {
+        Hero hero = saveHero("Old", 0);
+
+        mvc.perform(put("/heroes/{id}", hero.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"New\",\"version\":" + hero.getVersion() + "}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("New"))
+            .andExpect(jsonPath("$.version").value(hero.getVersion() + 1));
+    }
+
+    @Test
+    void updateWithStaleVersionReturns409() throws Exception {
+        Hero hero = saveHero("Old", 0);
+        mvc.perform(patch("/heroes/{id}/up", hero.getId())); // bumps the version
+
+        mvc.perform(put("/heroes/{id}", hero.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"New\",\"version\":" + hero.getVersion() + "}"))
+            .andExpect(status().isConflict())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        mvc.perform(get("/heroes/{id}", hero.getId()))
+            .andExpect(jsonPath("$.name").value("Old"));
     }
 
     @Test
