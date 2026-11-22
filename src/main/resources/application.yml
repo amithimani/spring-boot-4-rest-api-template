@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: heroes-api
+  profiles:
+    # Used when no profile is set explicitly (e.g. "./gradlew bootRun").
+    # Production sets SPRING_PROFILES_ACTIVE=prd, which overrides this.
+    default: dev
+  threads:
+    virtual:
+      # Serve requests on Java virtual threads.
+      enabled: true
+  jpa:
+    open-in-view: false
+
+server:
+  # Honour the port provided by PaaS platforms such as Railway or Heroku.
+  port: ${PORT:8080}

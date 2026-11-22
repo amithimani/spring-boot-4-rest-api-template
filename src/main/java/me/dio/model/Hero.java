@@ -17,10 +17,11 @@ public class Hero {
     /*
      * The version field is marked with the @Version annotation. This means JPA will
      * automatically take care of versioning for the Hero entity, which helps
-     * prevent concurrent modification conflicts.
+     * prevent concurrent modification conflicts. It is a wrapper type so that a
+     * null version unambiguously marks a new (not yet persisted) entity.
      */
     @Version
-    private int version;
+    private Integer version;
 
     public Long getId() {
         return id;
@@ -46,11 +47,11 @@ public class Hero {
         this.xp = xp;
     }
 
-    public int getVersion() {
+    public Integer getVersion() {
         return version;
     }
 
-    public void setVersion(int version) {
+    public void setVersion(Integer version) {
         this.version = version;
     }
 

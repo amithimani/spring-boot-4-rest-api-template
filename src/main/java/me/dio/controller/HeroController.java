@@ -19,6 +19,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import me.dio.controller.dto.HeroCreateRequest;
+import me.dio.controller.dto.HeroResponse;
+import me.dio.controller.dto.HeroUpdateRequest;
 import me.dio.model.Hero;
 import me.dio.service.HeroService;
 
@@ -28,55 +32,55 @@ import me.dio.service.HeroService;
 public record HeroController(HeroService heroService) {
 
     @GetMapping
-    @Operation(summary = "Get all heroes", description = "Get a list of all registered heroes")
-    @ApiResponses(value = { 
+    @Operation(summary = "Get all heroes", description = "Get a list of all registered heroes, sorted by XP (highest first)")
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successful operation")
     })
-    public ResponseEntity<List<Hero>> findAll() {
-        return ResponseEntity.ok(heroService.findAll());
+    public ResponseEntity<List<HeroResponse>> findAll() {
+        return ResponseEntity.ok(heroService.findAll().stream().map(HeroResponse::from).toList());
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a hero by ID", description = "Get a specific hero based on its ID")
-    @ApiResponses(value = { 
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successful operation"),
             @ApiResponse(responseCode = "404", description = "Hero not found")
     })
-    public ResponseEntity<Hero> findById(@PathVariable Long id) {
-        return ResponseEntity.ok(heroService.findById(id));
+    public ResponseEntity<HeroResponse> findById(@PathVariable Long id) {
+        return ResponseEntity.ok(HeroResponse.from(heroService.findById(id)));
     }
 
     @PostMapping
     @Operation(summary = "Create a new hero", description = "Create a new hero and returns the created hero")
-    @ApiResponses(value = { 
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Hero created successfully"),
-            @ApiResponse(responseCode = "422", description = "Invalid hero data provided")
+            @ApiResponse(responseCode = "400", description = "Invalid hero data provided")
     })
-    public ResponseEntity<Hero> create(@RequestBody Hero hero) {
-        // TODO: Create a DTO to avoid expose unnecessary Hero model attributes.
-        Hero createdHero = heroService.create(hero);
+    public ResponseEntity<HeroResponse> create(@Valid @RequestBody HeroCreateRequest request) {
+        Hero createdHero = heroService.create(request.toModel());
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(createdHero.getId())
                 .toUri();
-        return ResponseEntity.created(location).body(createdHero);
+        return ResponseEntity.created(location).body(HeroResponse.from(createdHero));
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a hero", description = "Update an existing hero based on its ID")
-    @ApiResponses(value = { 
+    @Operation(summary = "Update a hero", description = "Update the name of an existing hero based on its ID")
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Hero updated successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid hero data provided"),
             @ApiResponse(responseCode = "404", description = "Hero not found"),
-            @ApiResponse(responseCode = "422", description = "Invalid hero data provided")
+            @ApiResponse(responseCode = "409", description = "Hero was modified concurrently (stale version)"),
+            @ApiResponse(responseCode = "422", description = "Body ID does not match the path ID")
     })
-    public ResponseEntity<Hero> update(@PathVariable Long id, @RequestBody Hero hero) {
-        // TODO: Create a DTO to avoid expose unnecessary Hero model attributes.
-        return ResponseEntity.ok(heroService.update(id, hero));
+    public ResponseEntity<HeroResponse> update(@PathVariable Long id, @Valid @RequestBody HeroUpdateRequest request) {
+        return ResponseEntity.ok(HeroResponse.from(heroService.update(id, request.toModel())));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a hero", description = "Delete an existing hero based on its ID")
-    @ApiResponses(value = { 
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Hero deleted successfully"),
             @ApiResponse(responseCode = "404", description = "Hero not found")
     })
@@ -87,7 +91,7 @@ public record HeroController(HeroService heroService) {
 
     @PatchMapping("/{id}/up")
     @Operation(summary = "Increase hero XP", description = "Up XP to an existing hero based on its ID")
-    @ApiResponses(value = { 
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Vote registered successfully"),
             @ApiResponse(responseCode = "404", description = "Hero not found")
     })
