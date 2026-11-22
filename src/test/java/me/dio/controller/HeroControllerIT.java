@@ -1,0 +1,160 @@
+package me.dio.controller;
+
+import static org.hamcrest.Matchers.endsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import me.dio.model.Hero;
+import me.dio.repository.HeroRepository;
+
+/**
+ * End-to-end tests of the Heroes API against an in-memory H2 database.
+ * They pin down the current HTTP contract so framework upgrades can be verified.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+class HeroControllerIT {
+
+    @Autowired
+    private MockMvc mvc;
+
+    @Autowired
+    private HeroRepository repository;
+
+    @BeforeEach
+    void cleanDatabase() {
+        repository.deleteAll();
+    }
+
+    private Hero saveHero(String name, int xp) {
+        Hero hero = new Hero();
+        hero.setName(name);
+        hero.setXp(xp);
+        return repository.save(hero);
+    }
+
+    @Test
+    void createReturns201WithLocationAndStartsXpAtZero() throws Exception {
+        mvc.perform(post("/heroes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Batman\",\"xp\":999}"))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", endsWith("/heroes/" + repository.findAll().get(0).getId())))
+            .andExpect(jsonPath("$.id").isNumber())
+            .andExpect(jsonPath("$.name").value("Batman"))
+            .andExpect(jsonPath("$.xp").value(0));
+    }
+
+    @Test
+    void findAllIsSortedByXpDescending() throws Exception {
+        saveHero("Low", 1);
+        saveHero("High", 10);
+        saveHero("Mid", 5);
+
+        mvc.perform(get("/heroes"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(3))
+            .andExpect(jsonPath("$[0].name").value("High"))
+            .andExpect(jsonPath("$[1].name").value("Mid"))
+            .andExpect(jsonPath("$[2].name").value("Low"));
+    }
+
+    @Test
+    void findByIdReturnsHero() throws Exception {
+        Hero hero = saveHero("Robin", 3);
+
+        mvc.perform(get("/heroes/{id}", hero.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Robin"))
+            .andExpect(jsonPath("$.xp").value(3));
+    }
+
+    @Test
+    void findByIdReturns404WhenMissing() throws Exception {
+        mvc.perform(get("/heroes/{id}", 12345))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateChangesOnlyName() throws Exception {
+        Hero hero = saveHero("Old", 7);
+
+        mvc.perform(put("/heroes/{id}", hero.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":" + hero.getId() + ",\"name\":\"New\",\"xp\":1000}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("New"))
+            .andExpect(jsonPath("$.xp").value(7));
+    }
+
+    @Test
+    void updateWithMismatchedIdReturns422() throws Exception {
+        Hero hero = saveHero("Hero", 0);
+
+        mvc.perform(put("/heroes/{id}", hero.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":" + (hero.getId() + 1) + ",\"name\":\"X\"}"))
+            .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void updateReturns404WhenMissing() throws Exception {
+        mvc.perform(put("/heroes/{id}", 12345)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":12345,\"name\":\"X\"}"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteReturns204ThenHeroIsGone() throws Exception {
+        Hero hero = saveHero("Temp", 0);
+
+        mvc.perform(delete("/heroes/{id}", hero.getId()))
+            .andExpect(status().isNoContent());
+        mvc.perform(get("/heroes/{id}", hero.getId()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteReturns404WhenMissing() throws Exception {
+        mvc.perform(delete("/heroes/{id}", 12345))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void upIncreasesXpByTwo() throws Exception {
+        Hero hero = saveHero("Flash", 4);
+
+        mvc.perform(patch("/heroes/{id}/up", hero.getId()))
+            .andExpect(status().isNoContent());
+        mvc.perform(get("/heroes/{id}", hero.getId()))
+            .andExpect(jsonPath("$.xp").value(6));
+    }
+
+    @Test
+    void upReturns404WhenMissing() throws Exception {
+        mvc.perform(patch("/heroes/{id}/up", 12345))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void openApiDocsAreServed() throws Exception {
+        mvc.perform(get("/v3/api-docs"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.paths['/heroes']").exists());
+    }
+}
