@@ -15,3 +15,43 @@ spring:
 server:
   # Honour the port provided by PaaS platforms such as Railway or Heroku.
   port: ${PORT:8080}
+
+# ---- External users API (reqres.in) ----
+reqres:
+  base-url: https://reqres.in/api
+  # Optional personal key (free at https://app.reqres.in); without it the shared demo quota applies.
+  api-key: ${REQRES_API_KEY:}
+  pages: 2
+  connect-timeout: 2s
+  read-timeout: 3s
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      reqres:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        # Only failures that indicate an unhealthy upstream count towards opening the circuit.
+        record-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - org.springframework.web.client.HttpClientErrorException$TooManyRequests
+  retry:
+    instances:
+      reqres:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        # Retry only transient failures: I/O errors and timeouts, 5xx, and 429.
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - org.springframework.web.client.HttpClientErrorException$TooManyRequests
+        ignore-exceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
