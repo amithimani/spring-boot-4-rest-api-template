@@ -11,7 +11,7 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(BusinessException.class)
   public ResponseEntity<String> handleBusinessException(BusinessException ex) {
-    return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNPROCESSABLE_CONTENT);
   }
 
   @ExceptionHandler(NotFoundException.class)
